@@ -34,7 +34,7 @@ func main() {
 				func() error {
 					iter++
 					if iter%3 == 0 {
-						return errors.New("We failing on purpose")
+						return errors.New("We are failing on purpose")
 					}
 					remote, err := net.ResolveIPAddr("ip4", target)
 					if err != nil {

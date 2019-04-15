@@ -2,7 +2,6 @@ package stoppable
 
 import (
 	"errors"
-	"io"
 	"sync"
 	"time"
 )
@@ -20,8 +19,8 @@ type Task func(stopper chan struct{}, stopping chan error)
 
 // Closer is a convenience container for the channels sent to a task.
 type Closer struct {
-	lock   sync.Mutex
-	closed bool
+	sync.Mutex // Used to prevent it being closed twice.
+	closed     bool
 
 	stopper  chan struct{}
 	stopping chan error
@@ -31,8 +30,8 @@ type Closer struct {
 // Close sends a stop signal to the running task and blocks until an error type returns.
 // If a task has stopped before close it will be blocked waiting until close is called.
 func (s *Closer) Close() (err error) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
+	s.Lock()
+	defer s.Unlock()
 	if s.closed {
 		return ErrAlreadyClosed
 	}
@@ -44,8 +43,6 @@ func (s *Closer) Close() (err error) {
 	// Return the error back from the running task
 	return <-s.stopping
 }
-
-// TODO lifecycle error type? (lifecycle, outer, inner?)
 
 func newTask(setup, do, teardown func() error) Task {
 	return func(stopper chan struct{}, stopping chan error) {
@@ -88,7 +85,7 @@ func newTask(setup, do, teardown func() error) Task {
 
 // Open creates a stoppable goroutine with the three lifecycle functions provided.
 // There is no safety, a user can create a deadlock themselves here.
-func Open(setup, do, teardown func() error) (io.Closer, error) {
+func Open(setup, do, teardown func() error) (*Closer, error) {
 	err := setup()
 	if err != nil {
 		return nil, err

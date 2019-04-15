@@ -20,7 +20,7 @@ type Watcher struct {
 	setup, do, teardown func() error
 	restartHandler      func(WatcherError) bool
 	closer              io.Closer
-	mut                 sync.Mutex
+	sync.Mutex
 }
 
 func doWrapper(do func() error) (chan error, func() error) {
@@ -49,8 +49,8 @@ func (w *Watcher) watcher(interceptedStopping chan error) {
 	doingErr := <-interceptedStopping
 
 	// We are in error handler mode, prevent being interacted with until we resolve.
-	w.mut.Lock()
-	defer w.mut.Unlock()
+	w.Lock()
+	defer w.Unlock()
 
 	// A nil error implies stopping was natural and we should not restart.
 	if doingErr == nil {
@@ -91,6 +91,7 @@ func (w *Watcher) start() (err error) {
 	wrappedTeardown := teardownWrapper(interceptedStopping, w.teardown)
 	w.closer, err = Open(w.setup, wrappedDo, wrappedTeardown)
 	if err != nil {
+		w.closer = nil
 		close(interceptedStopping)
 		return err
 	}
@@ -100,8 +101,8 @@ func (w *Watcher) start() (err error) {
 
 // Start will attempt to setup
 func (w *Watcher) Start() (err error) {
-	w.mut.Lock()
-	defer w.mut.Unlock()
+	w.Lock()
+	defer w.Unlock()
 	return w.start()
 }
 
@@ -114,8 +115,8 @@ func (w *Watcher) stop() error {
 }
 
 func (w *Watcher) Stop() error {
-	w.mut.Lock()
-	defer w.mut.Unlock()
+	w.Lock()
+	defer w.Unlock()
 	return w.stop()
 }
 

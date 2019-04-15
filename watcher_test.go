@@ -27,7 +27,8 @@ func TestWatchdog(t *testing.T) {
 		func() error {
 			teardown = true
 			return nil
-		})
+		},
+		nil)
 	err := watchdog.Start()
 	if err != nil {
 		t.Error(err)
@@ -60,7 +61,7 @@ func TestWatchdog(t *testing.T) {
 }
 
 func TestWatchdogSetupFail(t *testing.T) {
-	watchdog := NewWatchdog(func() error { return TestErr }, DoesNothing, DoesNothing)
+	watchdog := NewWatchdog(func() error { return TestErr }, DoesNothing, DoesNothing, nil)
 
 	err := watchdog.Start()
 	if err != TestErr {
@@ -83,7 +84,7 @@ func TestWatchdogDoFails(t *testing.T) {
 	watchdog := NewWatchdog(DoesNothing, func() error {
 		close(awaiting)
 		return TestErr
-	}, DoesNothing)
+	}, DoesNothing, nil)
 
 	if err := watchdog.Start(); err != nil {
 		t.Error(err)
@@ -100,8 +101,7 @@ func TestWatchdogAutomaticRestart(t *testing.T) {
 	watchdog := NewWatchdog(DoesNothing, func() error {
 		<-awaiting
 		return TestErr
-	}, DoesNothing)
-	watchdog.restartHandler = RestartOnDo
+	}, DoesNothing, RestartOnDo)
 
 	if err := watchdog.Start(); err != nil {
 		t.Error(err)
