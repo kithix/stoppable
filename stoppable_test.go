@@ -6,8 +6,9 @@ import (
 	"time"
 )
 
+// Test Errors
 var (
-	TestErr = errors.New("Test Error")
+	ErrTest = errors.New("Test Error")
 )
 
 func TestOpenAndClose(t *testing.T) {
@@ -61,10 +62,10 @@ func TestOpenAndClose(t *testing.T) {
 func TestSetupFails(t *testing.T) {
 	_, err := Open(
 		func() error {
-			return TestErr
+			return ErrTest
 		}, DoesNothing, DoesNothing)
 
-	if err != TestErr {
+	if err != ErrTest {
 		t.Error(err)
 	}
 }
@@ -77,7 +78,7 @@ func TestDoingFails(t *testing.T) {
 		DoesNothing, func() error {
 			// We close, if this runs again it will panic.
 			close(doingHasRun)
-			return TestErr
+			return ErrTest
 		}, DoesNothing,
 	)
 	if err != nil {
@@ -87,20 +88,20 @@ func TestDoingFails(t *testing.T) {
 	<-doingHasRun
 
 	err = stoppable.Close()
-	if err != TestErr {
+	if err != ErrTest {
 		t.Error(err)
 	}
 }
 
 func TestTeardownFails(t *testing.T) {
 	stoppable, err := Open(DoesNothing, DoesNothing, func() error {
-		return TestErr
+		return ErrTest
 	})
 	if err != nil {
 		t.Error(err)
 	}
 	err = stoppable.Close()
-	if err != TestErr {
+	if err != ErrTest {
 		t.Error(err)
 	}
 }

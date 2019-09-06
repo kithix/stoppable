@@ -1,8 +1,16 @@
 package stoppable
 
 import (
+	"errors"
 	"testing"
 	"time"
+
+	"github.com/kithix/stoppable"
+)
+
+// Errors used for testing
+var (
+	ErrTest = errors.New("Test Error")
 )
 
 func TestWatchdog(t *testing.T) {
@@ -11,7 +19,7 @@ func TestWatchdog(t *testing.T) {
 	done := make(chan struct{})
 	teardown := false
 
-	watchdog := NewWatchdog(
+	watchdog := New(
 		func() error {
 			setup = true
 			return nil
@@ -60,16 +68,21 @@ func TestWatchdog(t *testing.T) {
 	}
 }
 
-func TestWatchdogSetupFail(t *testing.T) {
-	watchdog := NewWatchdog(func() error { return TestErr }, DoesNothing, DoesNothing, nil)
+func TestWatcherSetupFail(t *testing.T) {
+	watchdog := New(
+		func() error { return ErrTest },
+		stoppable.DoesNothing,
+		stoppable.DoesNothing,
+		nil,
+	)
 
 	err := watchdog.Start()
-	if err != TestErr {
+	if err != ErrTest {
 		t.Error(err)
 	}
 	// Ensure it tries to start the error again
 	err = watchdog.Start()
-	if err != TestErr {
+	if err != ErrTest {
 		t.Error(err)
 	}
 	// Ensure it is stopped.
@@ -79,29 +92,29 @@ func TestWatchdogSetupFail(t *testing.T) {
 	}
 }
 
-func TestWatchdogDoFails(t *testing.T) {
+func TestWatcherDoFails(t *testing.T) {
 	awaiting := make(chan struct{})
-	watchdog := NewWatchdog(DoesNothing, func() error {
+	watchdog := New(stoppable.DoesNothing, func() error {
 		close(awaiting)
-		return TestErr
-	}, DoesNothing, nil)
+		return ErrTest
+	}, stoppable.DoesNothing, nil)
 
 	if err := watchdog.Start(); err != nil {
 		t.Error(err)
 	}
 	<-awaiting
 
-	if err := watchdog.Stop(); err != ErrAlreadyStopped && err != TestErr {
+	if err := watchdog.Stop(); err != ErrAlreadyStopped && err != ErrTest {
 		t.Error(err)
 	}
 }
 
 func TestWatchdogAutomaticRestart(t *testing.T) {
 	awaiting := make(chan struct{})
-	watchdog := NewWatchdog(DoesNothing, func() error {
+	watchdog := New(stoppable.DoesNothing, func() error {
 		<-awaiting
-		return TestErr
-	}, DoesNothing, RestartOnDo)
+		return ErrTest
+	}, stoppable.DoesNothing, RestartOnDo)
 
 	if err := watchdog.Start(); err != nil {
 		t.Error(err)
@@ -109,7 +122,7 @@ func TestWatchdogAutomaticRestart(t *testing.T) {
 	close(awaiting)
 	// We could catch our watchdog at any state (setup, do, teardown) when initiating the stop.
 	// We cannot however receive an 'ErrAlreadyStopped' unlike above
-	if err := watchdog.Stop(); err != TestErr && err != nil {
+	if err := watchdog.Stop(); err != ErrTest && err != nil {
 		t.Error(err)
 	}
 }

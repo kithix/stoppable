@@ -4,23 +4,22 @@ import (
 	"errors"
 	"io"
 	"sync"
+
+	"github.com/kithix/stoppable"
 )
 
-// Errors
+// Error states to handle multiple start/stop calls
 var (
 	ErrAlreadyStarted = errors.New("Already started")
 	ErrAlreadyStopped = errors.New("Already stopped")
-
-	ErrSettingUp   = errors.New("Failure setting up")
-	ErrDoing       = errors.New("Failure doing")
-	ErrTearingDown = errors.New("Failure tearing down")
 )
 
+// Watcher is an implementation th
 type Watcher struct {
 	setup, do, teardown func() error
 	restartHandler      func(WatcherError) bool
 	closer              io.Closer
-	sync.Mutex
+	lock                sync.Mutex
 }
 
 func doWrapper(do func() error) (chan error, func() error) {
@@ -49,8 +48,8 @@ func (w *Watcher) watcher(interceptedStopping chan error) {
 	doingErr := <-interceptedStopping
 
 	// We are in error handler mode, prevent being interacted with until we resolve.
-	w.Lock()
-	defer w.Unlock()
+	w.lock.Lock()
+	defer w.lock.Unlock()
 
 	// A nil error implies stopping was natural and we should not restart.
 	if doingErr == nil {
@@ -89,7 +88,7 @@ func (w *Watcher) start() (err error) {
 	// Wrap our functions
 	interceptedStopping, wrappedDo := doWrapper(w.do)
 	wrappedTeardown := teardownWrapper(interceptedStopping, w.teardown)
-	w.closer, err = Open(w.setup, wrappedDo, wrappedTeardown)
+	w.closer, err = stoppable.Open(w.setup, wrappedDo, wrappedTeardown)
 	if err != nil {
 		w.closer = nil
 		close(interceptedStopping)
@@ -99,10 +98,10 @@ func (w *Watcher) start() (err error) {
 	return nil
 }
 
-// Start will attempt to setup
+// Start will run the Setup() function and lead into Do()
 func (w *Watcher) Start() (err error) {
-	w.Lock()
-	defer w.Unlock()
+	w.lock.Lock()
+	defer w.lock.Unlock()
 	return w.start()
 }
 
@@ -114,12 +113,14 @@ func (w *Watcher) stop() error {
 	return w.closer.Close()
 }
 
+// Stop will wait for Do() to finish running
 func (w *Watcher) Stop() error {
-	w.Lock()
-	defer w.Unlock()
+	w.lock.Lock()
+	defer w.lock.Unlock()
 	return w.stop()
 }
 
+// WatcherError is a special type of error structure that allows knowing that operation caused which error
 type WatcherError struct {
 	Do       error
 	Teardown error
@@ -130,24 +131,25 @@ func (watcherErr *WatcherError) Error() string {
 	stringBuilder := ""
 	// If the watcher error has more than one error, print the do -> stop -> start stack.
 	if watcherErr.Do != nil {
-		stringBuilder += ErrDoing.Error() + ": " + watcherErr.Do.Error()
+		stringBuilder += stoppable.ErrDoing.Error() + ": " + watcherErr.Do.Error()
 	}
 	if watcherErr.Teardown != nil {
 		if stringBuilder != "" {
 			stringBuilder += " and "
 		}
-		stringBuilder += ErrTearingDown.Error() + ": " + watcherErr.Teardown.Error()
+		stringBuilder += stoppable.ErrTearingDown.Error() + ": " + watcherErr.Teardown.Error()
 	}
 	if watcherErr.Setup != nil {
 		if stringBuilder != "" {
 			stringBuilder += " and "
 		}
-		stringBuilder += ErrSettingUp.Error() + ": " + watcherErr.Setup.Error()
+		stringBuilder += stoppable.ErrSettingUp.Error() + ": " + watcherErr.Setup.Error()
 	}
 
 	return ""
 }
 
+// RestartOnDo will always restart the Watchdog if it failed when the 'do' function failed for any reason
 func RestartOnDo(watcherErr WatcherError) bool {
 	if watcherErr.Teardown == nil && watcherErr.Setup == nil {
 		return true
@@ -155,7 +157,8 @@ func RestartOnDo(watcherErr WatcherError) bool {
 	return false
 }
 
-func NewWatchdog(setup, do, teardown func() error, restartHandler func(WatcherError) bool) *Watcher {
+// New constructs a watcher that has not been started
+func New(setup, do, teardown func() error, restartHandler func(WatcherError) bool) *Watcher {
 	return &Watcher{
 		setup:          setup,
 		do:             do,

@@ -6,9 +6,12 @@ import (
 	"time"
 )
 
-// Errors for stoppable lifecycle problems
+// Errors stoppable uses to show which step failed
 var (
 	ErrAlreadyClosed = errors.New("Already closed")
+	ErrSettingUp     = errors.New("Failure setting up")
+	ErrDoing         = errors.New("Failure doing")
+	ErrTearingDown   = errors.New("Failure tearing down")
 )
 
 // DoesNothing is a function that returns instantly with no error, used for matching the function signature of func() error
@@ -19,8 +22,8 @@ type Task func(stopper chan struct{}, stopping chan error)
 
 // Closer is a convenience container for the channels sent to a task.
 type Closer struct {
-	sync.Mutex // Used to prevent it being closed twice.
-	closed     bool
+	lock   sync.Mutex // Used to prevent it being closed twice.
+	closed bool
 
 	stopper  chan struct{}
 	stopping chan error
@@ -30,8 +33,8 @@ type Closer struct {
 // Close sends a stop signal to the running task and blocks until an error type returns.
 // If a task has stopped before close it will be blocked waiting until close is called.
 func (s *Closer) Close() (err error) {
-	s.Lock()
-	defer s.Unlock()
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	if s.closed {
 		return ErrAlreadyClosed
 	}
