@@ -14,7 +14,8 @@ var (
 	ErrAlreadyStopped = errors.New("Already stopped")
 )
 
-// Watcher is an implementation th
+// Watcher is an implementation of a stoppable thing
+// that allows it to be restarted by running setup() again
 type Watcher struct {
 	setup, do, teardown func() error
 	restartHandler      func(WatcherError) bool
@@ -150,15 +151,25 @@ func (watcherErr *WatcherError) Error() string {
 }
 
 // RestartOnDo will always restart the Watchdog if it failed when the 'do' function failed for any reason
-func RestartOnDo(watcherErr WatcherError) bool {
-	if watcherErr.Teardown == nil && watcherErr.Setup == nil {
+func RestartOnDo(err WatcherError) bool {
+	if err.Teardown == nil && err.Setup == nil {
 		return true
 	}
 	return false
 }
 
-// New constructs a watcher that has not been started
+// RestartNever will never automatically restart a Watchdog
+func RestartNever(_ WatcherError) bool {
+	return false
+}
+
+// New constructs a watcher that has not been started.
+// A restart handler is the startegy used to automatically run the functions again.
+// By default it will never automatically restart.
 func New(setup, do, teardown func() error, restartHandler func(WatcherError) bool) *Watcher {
+	if restartHandler == nil {
+		restartHandler = RestartNever
+	}
 	return &Watcher{
 		setup:          setup,
 		do:             do,
